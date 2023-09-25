@@ -9,14 +9,14 @@ error_t StackCtor(Stack *stk, const char* name, const unsigned line, const char*
 
     stk->size     = DEFAULT_SIZE;
     stk->capacity = DEFAULT_CAPACITY;
-    stk->data     = (Elem_t*) calloc(DEFAULT_CAPACITY, sizeof(Elem_t));
+    stk->data     = (Elem_t*) calloc(DEFAULT_CAPACITY + TWO_CANARY, sizeof(Elem_t));
 
     if (stk->data == NULL)
         {
         perror("ERROR: cannot allocate memory");
         return ALLOCATION_ERROR;
         }
-    StackFillingWithPoison(stk);
+    StackFillingWithPoison(stk);//and set canary
 
     stk->name = name;
     stk->line = line;
@@ -53,9 +53,17 @@ error_t StackFillingWithPoison(Stack *stk)
         StackDump_(stk, state);
         }
 
-    for (size_t iter = 0; iter < stk->capacity; iter++)
+    Elem_t *left_canary  = stk->data;
+    Elem_t *data         = stk->data + 1;
+    Elem_t *right_canary = stk->data + stk->capacity + 1;
+
+    *left_canary  = DATA_LEFT_CANARY_VALUE;
+    *right_canary = DATA_RIGHT_CANARY_VALUE;
+
+    for (size_t iter = stk->size; iter < stk->capacity; iter++)
         {
-        stk->data[iter] = POISON;
+        data[iter] = POISON;
+
         }
 
     return OK;
@@ -69,7 +77,12 @@ error_t StackPush(Stack *stk, Elem_t value)
         StackDump_(stk, state);
         }
 
-    /* Push */
+    if (stk->size == stk->capacity)
+        {
+        StackReallocUp(stk);
+        }
+
+    stk->data[ONE_CANARY + stk->size++] = value;
 
     return OK;
     }
@@ -82,8 +95,56 @@ error_t StackPop(Stack *stk, Elem_t *ret_val)
         StackDump_(stk, state);
         }
 
-    /* Push */
+    *ret_val = stk->data[ONE_CANARY + --stk->size];
+    stk->data[ONE_CANARY + stk->size] = POISON;
 
+    if (stk->size <= stk->capacity / REALLOC_DOWN_BORDER && stk->capacity > MIN_REALLOC_DOWN_SIZE)
+        {
+        StackReallocDown(stk);
+        }
+
+    return OK;
+    }
+
+error_t StackReallocUp(Stack *stk)
+    {
+    Stack_state state = StackValid(stk);
+    if (state)
+        {
+        StackDump_(stk, state);
+        }
+
+    stk->data = (Elem_t*) realloc(stk->data, (stk->capacity * REALLOC_COEFFICIENT + TWO_CANARY) * sizeof(Elem_t));
+    if (stk->data == NULL)
+        {
+        perror("ERROR: cannot allocate memory");
+        return ALLOCATION_ERROR;
+        }
+
+    stk->capacity *= REALLOC_COEFFICIENT;
+
+    StackFillingWithPoison(stk);//and set canary
+    return OK;
+    }
+
+error_t StackReallocDown(Stack *stk)
+    {
+    Stack_state state = StackValid(stk);
+    if (state)
+        {
+        StackDump_(stk, state);
+        }
+
+    stk->data = (Elem_t*) realloc(stk->data, (stk->capacity / REALLOC_COEFFICIENT + TWO_CANARY) * sizeof(Elem_t));
+    if (stk->data == NULL)
+        {
+        perror("ERROR: cannot allocate memory");
+        return ALLOCATION_ERROR;
+        }
+
+    stk->capacity /= REALLOC_COEFFICIENT;
+
+    StackFillingWithPoison(stk);//and set canary
     return OK;
     }
 
@@ -104,12 +165,15 @@ error_t StackDump(const Stack *stk, Stack_state state, const unsigned line, cons
 
     for (size_t iter = 0; iter < stk->capacity; iter++)
         {
-        printf((stk->data[iter] != POISON) ? "\t\t*" : "\t\t ");
+        printf((stk->data[iter + ONE_CANARY] != POISON) ? "\t\t*" : "\t\t ");
         printf("[%ld] = ", iter);
-        printf((stk->data[iter] == POISON) ? "POISON\n" : "%d\n", stk->data[iter]);
+        printf((stk->data[iter + ONE_CANARY] == POISON) ? "POISON\n" : "%d\n", stk->data[iter + ONE_CANARY]);
         }
 
-    printf("\t}\n");
+    printf("\t\tData left canary  = %X\n", stk->data[0]);
+    printf("\t\tData right canary = %X\n", stk->data[stk->capacity + ONE_CANARY]);
+
+    printf("\t\t}\n\t}\n");
 
     /*for(char iter = 0; iter < 8 * sizeof(state); iter++)
         {

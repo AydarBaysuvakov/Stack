@@ -11,10 +11,23 @@ typedef char      Stack_state;
 
 const Canary_t LEFT_CANARY_VALUE  = 0xDEDDABABA;
 const Canary_t RIGHT_CANARY_VALUE = 0xBABADADED;
-const size_t   DEFAULT_CAPACITY = 5;
+
+const Elem_t   DATA_LEFT_CANARY_VALUE  = 0xA1DA2;
+const Elem_t   DATA_RIGHT_CANARY_VALUE = 0xBA15;
+
 const size_t   DEFAULT_SIZE     = 0;
+const size_t   DEFAULT_CAPACITY = 8;
+
+const size_t   ONE_CANARY       = 1;
+const size_t   TWO_CANARY       = 2;
+
 const size_t   NOT_VALID_VALUE  = 0xBAD;
-const Elem_t   POISON = sizeof(Elem_t) * sizeof(Elem_t) * sizeof(Elem_t) * sizeof(Elem_t);//заглушка
+const Elem_t   POISON           = 0xBAD;
+
+const int REALLOC_COEFFICIENT   = 2;
+const int MIN_REALLOC_DOWN_SIZE = 16;
+const int REALLOC_DOWN_BORDER   = 4;
+
 
 struct Stack
     {
@@ -50,6 +63,10 @@ error_t StackFillingWithPoison(Stack *stk);
 error_t StackPush(Stack *stk, Elem_t value);
 
 error_t StackPop(Stack *stk, Elem_t *ret_val);
+
+error_t StackReallocUp(Stack *stk);
+
+error_t StackReallocDown(Stack *stk);
 
 Stack_state StackValid(const Stack *stk);
 
