@@ -17,7 +17,7 @@ int main()
     StackPush(&stk, 5);
     Elem_t ret = 0;
     StackPop(&stk, &ret);
-    printf("%d\n", ret);
-    StackDump_(&stk, 0);
+    //printf("%d\n", ret);
+    //StackDump_(&stk, 0);
     StackDtor(&stk);
     }

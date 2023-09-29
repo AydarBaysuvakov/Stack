@@ -2,6 +2,8 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "stack.h"
+#include "hash.h"
+
 
 error_t StackCtor(Stack *stk, const char* name, const unsigned line, const char* file, const char* func)
     {
@@ -26,12 +28,14 @@ error_t StackCtor(Stack *stk, const char* name, const unsigned line, const char*
     stk->left_canary  = LEFT_CANARY_VALUE;
     stk->right_canary = RIGHT_CANARY_VALUE;
 
+    SetHash(stk);
+
     return OK;
     }
 
 error_t StackDtor(Stack *stk)
     {
-    Stack_state state = StackValid(stk);
+    StackState state = StackValid(stk);
     if (state)
         {
         StackDump_(stk, state);
@@ -42,20 +46,24 @@ error_t StackDtor(Stack *stk)
     stk->size     = NOT_VALID_VALUE;
     stk->capacity = NOT_VALID_VALUE;
 
+    stk->left_canary  = NOT_VALID_VALUE;
+    stk->right_canary = NOT_VALID_VALUE;
+
+    stk->data_hash  = NOT_VALID_VALUE;
+    stk->stack_hash = NOT_VALID_VALUE;
+
     return OK;
     }
 
 error_t StackFillingWithPoison(Stack *stk)
     {
-    Stack_state state = StackValid(stk);
-    if (state)
-        {
-        StackDump_(stk, state);
-        }
+    assert(stk != NULL);
+    assert(stk->data != NULL);
+    assert(stk->size <= stk->capacity);
 
     Elem_t *left_canary  = stk->data;
-    Elem_t *data         = stk->data + 1;
-    Elem_t *right_canary = stk->data + stk->capacity + 1;
+    Elem_t *data         = stk->data + ONE_CANARY;
+    Elem_t *right_canary = stk->data + stk->capacity + ONE_CANARY;
 
     *left_canary  = DATA_LEFT_CANARY_VALUE;
     *right_canary = DATA_RIGHT_CANARY_VALUE;
@@ -63,7 +71,6 @@ error_t StackFillingWithPoison(Stack *stk)
     for (size_t iter = stk->size; iter < stk->capacity; iter++)
         {
         data[iter] = POISON;
-
         }
 
     return OK;
@@ -71,7 +78,7 @@ error_t StackFillingWithPoison(Stack *stk)
 
 error_t StackPush(Stack *stk, Elem_t value)
     {
-    Stack_state state = StackValid(stk);
+    StackState state = StackValid(stk);
     if (state)
         {
         StackDump_(stk, state);
@@ -82,33 +89,37 @@ error_t StackPush(Stack *stk, Elem_t value)
         StackReallocUp(stk);
         }
 
-    stk->data[ONE_CANARY + stk->size++] = value;
+    stk->data[stk->size++ + ONE_CANARY] = value;
+
+    SetHash(stk);
 
     return OK;
     }
 
 error_t StackPop(Stack *stk, Elem_t *ret_val)
     {
-    Stack_state state = StackValid(stk);
+    StackState state = StackValid(stk);
     if (state)
         {
         StackDump_(stk, state);
         }
 
-    *ret_val = stk->data[ONE_CANARY + --stk->size];
-    stk->data[ONE_CANARY + stk->size] = POISON;
+    *ret_val = stk->data[--stk->size + ONE_CANARY];
+    stk->data[stk->size + ONE_CANARY] = POISON;
 
     if (stk->size <= stk->capacity / REALLOC_DOWN_BORDER && stk->capacity > MIN_REALLOC_DOWN_SIZE)
         {
         StackReallocDown(stk);
         }
 
+    SetHash(stk);
+
     return OK;
     }
 
 error_t StackReallocUp(Stack *stk)
     {
-    Stack_state state = StackValid(stk);
+    StackState state = StackValid(stk);
     if (state)
         {
         StackDump_(stk, state);
@@ -129,7 +140,7 @@ error_t StackReallocUp(Stack *stk)
 
 error_t StackReallocDown(Stack *stk)
     {
-    Stack_state state = StackValid(stk);
+    StackState state = StackValid(stk);
     if (state)
         {
         StackDump_(stk, state);
@@ -148,16 +159,67 @@ error_t StackReallocDown(Stack *stk)
     return OK;
     }
 
-Stack_state StackValid(const Stack *stk)
+StackState StackValid(Stack *stk)
     {
-    Stack_state state = 0;
+    StackState state = 0;
+    int bit = 1;
 
-    /* checking */
+    if (stk == NULL) // 1
+        {
+        state |= bit;
+        return state;
+        }
+    bit *= 2;
+    if (stk->data == NULL) // 2
+        {
+        state |= bit;
+        }
+    bit *= 2;
+    if (stk->size > stk->capacity) // 3
+        {
+        state |= bit;
+        }
+    bit *= 2;
+    if (stk->size != 0 && stk->data[stk->size] == POISON) // 4
+        {
+        state |= bit;
+        }
+    bit *= 2;
+    if (stk->left_canary != LEFT_CANARY_VALUE) // 5
+        {
+        state |= bit;
+        }
+    bit *= 2;
+    if (stk->right_canary != RIGHT_CANARY_VALUE) // 6
+        {
+        state |= bit;
+        }
+    bit *= 2;
+    if (stk->data[0] != DATA_LEFT_CANARY_VALUE) // 7
+        {
+        state |= bit;
+        }
+    bit *= 2;
+    if (stk->data[stk->capacity + ONE_CANARY] != DATA_RIGHT_CANARY_VALUE) // 8
+        {
+        state |= bit;
+        }
+    bit *= 2;
+    if (DataHashCheck(stk)) // 9
+        {
+        state |= bit;
+        }
+    bit *= 2;
+    if (StackHashCheck(stk)) // 10
+        {
+        state |= bit;
+        }
+    bit *= 2;
 
     return state;
     }
 
-error_t StackDump(const Stack *stk, Stack_state state, const unsigned line, const char* file, const char* func)
+error_t StackDump(const Stack *stk, StackState state, const unsigned line, const char* file, const char* func)
     {
     printf("Stack[%p] '%s' from %s(%d) %s()\n", stk, stk->name, stk->file, stk->line, stk->func);
     printf(    "\t\tcalled from %s(%d) %s()\n",                      file,      line,      func);
@@ -175,15 +237,13 @@ error_t StackDump(const Stack *stk, Stack_state state, const unsigned line, cons
 
     printf("\t\t}\n\t}\n");
 
-    /*for(char iter = 0; iter < 8 * sizeof(state); iter++)
+    for(char bit = 0; bit < BIT_IN_BYTE * sizeof(state); bit++)
         {
-        if (state & 1)
+        if (state & (int) pow(2, bit))
             {
-            printf("%s", ERROR_MESSAGE[iter]);
+            printf("%s\n", ERROR_MESSAGE[bit]);
             }
-        state = state >> 1;
-        }*/
+        }
 
     return OK;
     }
-
