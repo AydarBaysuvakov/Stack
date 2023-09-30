@@ -1,10 +1,12 @@
-#ifndef __STACK__
-#define __STACK__
+#ifndef STACK_H
+#define STACK_H
 
-#define StackCtor_(stk)         StackCtor((stk), #stk,    __LINE__, __FILE__, __FUNCTION__)
-#define StackDump_(stk, stk_st) StackDump((stk), (stk_st),  __LINE__, __FILE__, __FUNCTION__)
+#include <limits.h>
 
-#include <math.h>
+#define STACK_DEFN_ARGS const char*, const unsigned, const char*, const char*
+#define STACK_PASS_ARGS __LINE__, __FILE__, __FUNCTION__
+#define StackCtor(stk)         MyStackCtor((stk),           #stk, STACK_PASS_ARGS)
+#define StackDump(stk, stk_st) MyStackDump((stk), (stk_st), #stk, STACK_PASS_ARGS)
 
 typedef long long Hash_t;
 typedef int       Elem_t;
@@ -14,8 +16,8 @@ typedef int       StackState;
 const Canary_t LEFT_CANARY_VALUE  = 0xDEDDABABA;
 const Canary_t RIGHT_CANARY_VALUE = 0xBABADADED;
 
-const Elem_t   DATA_LEFT_CANARY_VALUE  = (Elem_t) (0xA1DA2 % (int) pow(2, 8 * sizeof(Elem_t)));
-const Elem_t   DATA_RIGHT_CANARY_VALUE = (Elem_t) (0xBA15  % (int) pow(2, 8 * sizeof(Elem_t)));
+const Elem_t   DATA_LEFT_CANARY_VALUE  = (Elem_t) (0xA1DA2 % (((long long) 1) << CHAR_BIT * sizeof(Elem_t)));
+const Elem_t   DATA_RIGHT_CANARY_VALUE = (Elem_t) (0xBA15  % (((long long) 1) << CHAR_BIT * sizeof(Elem_t)));
 
 const size_t   DEFAULT_SIZE     = 0;
 const size_t   DEFAULT_CAPACITY = 8;
@@ -24,13 +26,11 @@ const size_t   ONE_CANARY       = 1;
 const size_t   TWO_CANARY       = 2;
 
 const long long NOT_VALID_VALUE  = 0xBAD;
-const Elem_t    POISON           = (Elem_t) (0xBAD % (int) pow(2, 8 * sizeof(Elem_t)));
+const Elem_t    POISON           = (Elem_t) (0xBAD % (((long long) 1) << CHAR_BIT * sizeof(Elem_t)));
 
 const int REALLOC_COEFFICIENT   = 2;
 const int MIN_REALLOC_DOWN_SIZE = 16;
 const int REALLOC_DOWN_BORDER   = 4;
-
-const size_t BIT_IN_BYTE_ = 8;
 
 enum error_t
     {
@@ -58,25 +58,36 @@ struct Stack
     Canary_t right_canary;
     };
 
-const int  ERROR_COUNT = sizeof(StackState) * BIT_IN_BYTE_;
-const char * const ERROR_MESSAGE[ERROR_COUNT] = {"1.Stack is nullptr", "2.Stack->data is nullptr", "3.Stack->size > Stack->capacity", "4.Curent value is poison", "5.Left canary killed", "6.Right canary killed", "7.Data left canary killed", "8.Data right canary killed", "9.Data hash not compare", "10.Stack hash not compare"};
+enum StackErrorBit
+{
+    STK_NULLPTR               = 1 << 0,
+    STK_DATA_NULL             = 1 << 1,
+    STK_INVALID_SIZE          = 1 << 2,
+    STK_POISON_VAL            = 1 << 3,
+    LEFT_CANARY_CILLED        = 1 << 4,
+    RIGHT_CANARY_CILLED       = 1 << 5,
+    DATA_LEFT_CANARY_CILLED   = 1 << 6,
+    DATA_RIGHT_CANARY_CILLED  = 1 << 7,
+    DATA_HASH_NOT_COMPARE     = 1 << 8,
+    STACK_HASH_NOT_COMPARE    = 1 << 9,
+};
 
-error_t StackCtor(Stack *stk, const char* name, const unsigned line, const char* file, const char* func);
+error_t MyStackCtor(Stack *stk, STACK_DEFN_ARGS);
 
 error_t StackDtor(Stack *stk);
 
-error_t StackFillingWithPoison(Stack *stk);
+error_t FillStack(Stack *stk);
 
 error_t StackPush(Stack *stk, Elem_t value);
 
 error_t StackPop(Stack *stk, Elem_t *ret_val);
 
-error_t StackReallocUp(Stack *stk);
-
-error_t StackReallocDown(Stack *stk);
+error_t StackRealloc(Stack* stk, size_t new_capacity);
 
 StackState StackValid(Stack *stk);
 
-error_t StackDump(const Stack *stk, StackState state, const unsigned line, const char* file, const char* func);
+error_t MyStackDump(const Stack *stk, StackState state, STACK_DEFN_ARGS);
 
-#endif//__STACK__
+const char* GetStackErrorBitMsg(size_t bit);
+
+#endif//STACK_H
