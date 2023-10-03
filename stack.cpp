@@ -2,25 +2,27 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <string.h>
 #include "stack.h"
 #include "hash.h"
 
-// html logfile.html <pre/>
-// Makefile + FIX ALL flags warnings!!!!!
-
 error_t MyStackCtor(Stack *stk, const char* name, const unsigned line, const char* file, const char* func)
     {
+#ifdef DEBUG
     assert(stk != NULL);
+#endif
 
     stk->size     = DEFAULT_SIZE;
     stk->capacity = DEFAULT_CAPACITY;
-    stk->data     = (Elem_t*) calloc(DEFAULT_CAPACITY + TWO_CANARY, sizeof(Elem_t)) + ONE_CANARY;
 
-    if (stk->data == NULL)
+    char *data = (char*) malloc(DEFAULT_CAPACITY * sizeof(Elem_t) + TWO_CANARY * sizeof(Canary_t));
+    if (data == NULL)
         {
         perror("ERROR: cannot allocate memory");
         return ALLOCATION_ERROR;
         }
+
+    stk->data = (Elem_t*) (data + ONE_CANARY * sizeof(Canary_t));
     FillStack(stk);
 
     stk->name = name;
@@ -28,50 +30,93 @@ error_t MyStackCtor(Stack *stk, const char* name, const unsigned line, const cha
     stk->file = file;
     stk->func = func;
 
-#ifndef STACK_CANARY_PROT
+    if (LogFileInit(stk, name) == FILE_ERROR)
+        {
+        perror("ERROR: cannot open logfile");
+        return FILE_ERROR;
+        }
+
+#ifdef STACK_CANARY_PROT
     stk->left_canary  = LEFT_CANARY_VALUE;
     stk->right_canary = RIGHT_CANARY_VALUE;
 #endif
 
-//?
+#ifdef STACK_HASH_PROT
     SetHash(stk);
+#endif
 
     return OK;
     }
 
 error_t StackDtor(Stack *stk)
     {
+#ifdef DEBUG
     StackState state = StackValid(stk);
     if (state)
         {
         StackDump(stk, state);
         }
+#endif
 
-    free(stk->data - ONE_CANARY);
+    free(GetDataLeftCanary(stk));
 
     stk->size     = NOT_VALID_VALUE;
     stk->capacity = NOT_VALID_VALUE;
 
+#ifdef STACK_CANARY_PROT
     stk->left_canary  = NOT_VALID_VALUE;
     stk->right_canary = NOT_VALID_VALUE;
+#endif
 
+#ifdef STACK_HASH_PROT
     stk->data_hash  = NOT_VALID_VALUE;
     stk->stack_hash = NOT_VALID_VALUE;
+#endif
+
+    fprintf(stk->logfile, "\t</body>\n" "</html>\n");
+
+    fclose(stk->logfile);
+
+    return OK;
+    }
+
+error_t LogFileInit(Stack *stk, const char* name)
+    {
+    char file_name[LOG_FILE_NAME_LENGHT] = "logfile(";
+    strncat(file_name,  name   , LOG_FILE_STK_NAME_LENGHT);
+    strncat(file_name, ").html", LOG_FILE_STK_NAME_LENGHT);
+
+    stk->logfile = fopen(file_name, "w");
+    if (stk->logfile == NULL)
+        {
+        return FILE_ERROR;
+        }
+
+    fprintf(stk->logfile,   "<!DOCTYPE HTML>\n"
+                            "<html>\n"
+                            "\t<head>\n"
+                            "\t\t<meta charset=\"utf-8\">\n"
+                            "\t</head>\n"
+                            "\t<body>\n");
 
     return OK;
     }
 
 error_t FillStack(Stack *stk)
     {
+#ifdef DEBUG
     assert(stk != NULL);
     assert(stk->data != NULL);
     assert(stk->size <= stk->capacity);
+#endif
 
-    Elem_t *left_canary  = stk->data - ONE_CANARY;
-    Elem_t *right_canary = stk->data + stk->capacity;
+#ifdef STACK_CANARY_PROT
+    Canary_t *left_canary  = GetDataLeftCanary(stk);
+    Canary_t *right_canary = GetDataRightCanary(stk);
 
     *left_canary  = DATA_LEFT_CANARY_VALUE;
     *right_canary = DATA_RIGHT_CANARY_VALUE;
+#endif
 
     for (size_t iter = stk->size; iter < stk->capacity; iter++)
         {
@@ -83,11 +128,13 @@ error_t FillStack(Stack *stk)
 
 error_t StackPush(Stack *stk, Elem_t value)
     {
+#ifdef DEBUG
     StackState state = StackValid(stk);
     if (state)
         {
         StackDump(stk, state);
         }
+#endif
 
     if (stk->size == stk->capacity)
         {
@@ -96,18 +143,22 @@ error_t StackPush(Stack *stk, Elem_t value)
 
     stk->data[stk->size++] = value;
 
+#ifdef STACK_HASH_PROT
     SetHash(stk);
+#endif
 
     return OK;
     }
 
 error_t StackPop(Stack *stk, Elem_t *ret_val)
     {
+#ifdef DEBUG
     StackState state = StackValid(stk);
     if (state)
         {
         StackDump(stk, state);
         }
+#endif
 
     *ret_val = stk->data[--stk->size];
     stk->data[stk->size] = POISON;
@@ -117,113 +168,124 @@ error_t StackPop(Stack *stk, Elem_t *ret_val)
         StackRealloc(stk, stk->capacity / REALLOC_COEFFICIENT);
         }
 
+#ifdef STACK_HASH_PROT
     SetHash(stk);
+#endif
 
     return OK;
     }
 
 error_t StackRealloc(Stack* stk, size_t new_capacity)
     {
+#ifdef DEBUG
     StackState state = StackValid(stk);
     if (state)
         {
         StackDump(stk, state);
         }
+#endif
 
-    stk->data = (Elem_t*) realloc(stk->data - ONE_CANARY, (new_capacity + TWO_CANARY) * sizeof(Elem_t)) + ONE_CANARY;
-    if (stk->data == NULL)
+    char *data = (char*) realloc(GetDataLeftCanary(stk), new_capacity * sizeof(Elem_t) + TWO_CANARY * sizeof(Canary_t));
+    if (data == NULL)
         {
         perror("ERROR: cannot allocate memory");
         return ALLOCATION_ERROR;
         }
 
+    stk->data     = (Elem_t*) (data + ONE_CANARY * sizeof(Canary_t));
     stk->capacity = new_capacity;
 
     FillStack(stk);
     return OK;
     }
 
-// / or  % 4 4 4 4 8 to align right canary
-
 StackState StackValid(Stack *stk)
     {
     StackState state = 0;
 
-    if (stk == NULL) // 1
+    if (stk == NULL)                                           // 1
         {
         state |= STK_NULLPTR;
         return state;
         }
-    if (stk->data == NULL) // 2
+    if (stk->data == NULL)                                     // 2
         {
         state |= STK_DATA_NULL;
         }
-    if (stk->size > stk->capacity) // 3
+    if (stk->size > stk->capacity)                             // 3
         {
         state |= STK_INVALID_SIZE;
         }
-    if (stk->size != 0 && stk->data[stk->size - 1] == POISON) // 4
+    if (stk->size != 0 && stk->data[stk->size - 1] == POISON)  // 4
         {
         state |= STK_POISON_VAL;
         }
-    if (stk->left_canary != LEFT_CANARY_VALUE) // 5
+#ifdef STACK_CANARY_PROT
+    if (stk->left_canary != LEFT_CANARY_VALUE)                 // 5
         {
         state |= LEFT_CANARY_CILLED;
         }
-    if (stk->right_canary != RIGHT_CANARY_VALUE) // 6
+    if (stk->right_canary != RIGHT_CANARY_VALUE)               // 6
         {
         state |= RIGHT_CANARY_CILLED;
         }
-    if (stk->data[-ONE_CANARY] != DATA_LEFT_CANARY_VALUE) // 7
+    if (*GetDataLeftCanary(stk) != DATA_LEFT_CANARY_VALUE)      // 7
         {
         state |= DATA_LEFT_CANARY_CILLED;
         }
-    if (stk->data[stk->capacity] != DATA_RIGHT_CANARY_VALUE) // 8
+    if (*GetDataRightCanary(stk) != DATA_RIGHT_CANARY_VALUE)   // 8
         {
         state |= DATA_RIGHT_CANARY_CILLED;
         }
-    if (DataHashCheck(stk)) // 9
+#endif
+#ifdef STACK_HASH_PROT
+    if (DataHashCheck(stk))                                    // 9
         {
         state |= DATA_HASH_NOT_COMPARE;
         }
-    if (StackHashCheck(stk)) // 10
+    if (StackHashCheck(stk))                                   // 10
         {
         state |= STACK_HASH_NOT_COMPARE;
         }
-
+#endif
     return state;
     }
 
 error_t MyStackDump(const Stack *stk, StackState state, const char* name, const unsigned line, const char* file, const char* func)
     {
-    printf("Stack[%p] '%s' from %s(%d) %s()\n", stk, stk->name, stk->file, stk->line, stk->func);
-    printf(    "\t\tcalled from %s(%d) %s()\n",                      file,      line,      func);
-    printf("\t{\n\tsize = %ld\n\tcapacity = %ld\n\tdata[%p]\n\t\t{\n", stk->size, stk->capacity, stk->data);
+    fprintf(stk->logfile, "<pre>\n\n");
+
+    fprintf(stk->logfile, "Stack[%p] '%s' from %s(%u) %s()\n", stk, stk->name, stk->file, stk->line, stk->func);
+    fprintf(stk->logfile, "\tcalled like '%s' from %s(%u) %s()\n",       name,      file,      line,      func);
+    fprintf(stk->logfile, "\t{\n\tsize = %lu\n\tcapacity = %lu\n\tdata[%p]\n\t\t{\n", stk->size, stk->capacity, stk->data);
 
     for (size_t iter = 0; iter < stk->capacity; iter++)
         {
-        printf((stk->data[iter] != POISON) ? "\t\t*" : "\t\t ");
-        printf("[%ld] = ", iter);
-        printf((stk->data[iter] == POISON) ? "POISON\n" : "%d\n", stk->data[iter]);
+        fprintf(stk->logfile, (stk->data[iter] != POISON) ? "\t\t*" : "\t\t ");
+        fprintf(stk->logfile, "[%lu] = ", iter);
+        fprintf(stk->logfile, (stk->data[iter] == POISON) ? "POISON\n" : "%d\n", stk->data[iter]);
         }
+    fprintf(stk->logfile, "\t\t}\n");
 
-    printf("\t\tData left canary  = %X\n", stk->data[-ONE_CANARY]);
-    printf("\t\tData right canary = %X\n", stk->data[stk->capacity]);
+#ifdef STACK_CANARY_PROT
+    fprintf(stk->logfile, "\t\tData left canary  = %llX\n",   *GetDataLeftCanary(stk));
+    fprintf(stk->logfile, "\t\tData right canary = %llX\n\n", *GetDataRightCanary(stk));
 
-    printf("\t\t}\n");
+    fprintf(stk->logfile, "\tLeft canary  = %llX\n", stk->left_canary);
+    fprintf(stk->logfile, "\tRight canary = %llX\n", stk->right_canary);
+#endif
 
-    printf("\tLeft canary  = %llX\n", stk->left_canary);
-    printf("\tRight canary = %llX\n", stk->right_canary);
+    fprintf(stk->logfile, "\t}\n\n");
 
-    printf("\t}\n");
-
-    for(char bit = 0; bit < CHAR_BIT * sizeof(state); bit++)
+    for(size_t bit = 0; bit < CHAR_BIT * sizeof(state); bit++)
         {
         if (state & 1 << bit)
             {
-            printf("%s\n", GetStackErrorBitMsg(bit));
+            fprintf(stk->logfile, "%s\n", GetStackErrorBitMsg(bit));
             }
         }
+
+    fprintf(stk->logfile, "</pre>\n\n");
 
     return OK;
     }
@@ -246,3 +308,25 @@ const char* GetStackErrorBitMsg(size_t bit)
 
     return ERROR_MESSAGE[bit];
 }
+
+#ifdef STACK_CANARY_PROT
+Canary_t* GetDataLeftCanary(const Stack *stk)
+    {
+    return (Canary_t*) ((char*) stk->data - ONE_CANARY * sizeof(Canary_t));
+    }
+
+Canary_t* GetDataRightCanary(const Stack *stk)
+    {
+    return (Canary_t*) (stk->data + stk->capacity);
+    }
+#else
+Elem_t* GetDataLeftCanary(const Stack *stk)
+    {
+    return stk->data;
+    }
+
+Elem_t* GetDataRightCanary(const Stack *stk)
+    {
+    return stk->data + stk->capacity;
+    }
+#endif
