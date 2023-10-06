@@ -7,8 +7,7 @@ int main()
     Stack stk = {};
     StackCtor(&stk);
 
-    stk.capacity = 10;
-    StackPush(&stk, 8);
+    //Hack
 
     StackDtor(&stk);
     }
