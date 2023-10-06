@@ -73,8 +73,6 @@ error_t StackDtor(Stack *stk)
     stk->stack_hash = NOT_VALID_VALUE;
 #endif
 
-    fprintf(stk->logfile, "\t</body>\n" "</html>\n");
-
     fclose(stk->logfile);
 
     return OK;
@@ -84,20 +82,13 @@ error_t LogFileInit(Stack *stk, const char* name)
     {
     char file_name[LOG_FILE_NAME_LENGHT] = "logfile(";
     strncat(file_name,  name   , LOG_FILE_STK_NAME_LENGHT);
-    strncat(file_name, ").html", LOG_FILE_STK_NAME_LENGHT);
+    strncat(file_name, ").txt", LOG_FILE_STK_NAME_LENGHT);
 
     stk->logfile = fopen(file_name, "w");
     if (stk->logfile == NULL)
         {
         return FILE_ERROR;
         }
-
-    fprintf(stk->logfile,   "<!DOCTYPE HTML>\n"
-                            "<html>\n"
-                            "\t<head>\n"
-                            "\t\t<meta charset=\"utf-8\">\n"
-                            "\t</head>\n"
-                            "\t<body>\n");
 
     return OK;
     }
@@ -243,17 +234,12 @@ StackState StackValid(Stack *stk)
         {
         state |= DATA_HASH_NOT_COMPARE;
         }
-    if (StackHashCheck(stk))                                   // 10
-        {
-        state |= STACK_HASH_NOT_COMPARE;
-        }
 #endif
     return state;
     }
 
 error_t MyStackDump(const Stack *stk, StackState state, const char* name, const unsigned line, const char* file, const char* func)
     {
-    fprintf(stk->logfile, "<pre>\n\n");
 
     fprintf(stk->logfile, "Stack[%p] '%s' from %s(%u) %s()\n", stk, stk->name, stk->file, stk->line, stk->func);
     fprintf(stk->logfile, "\tcalled like '%s' from %s(%u) %s()\n",       name,      file,      line,      func);
@@ -285,7 +271,6 @@ error_t MyStackDump(const Stack *stk, StackState state, const char* name, const 
             }
         }
 
-    fprintf(stk->logfile, "</pre>\n\n");
 
     return OK;
     }

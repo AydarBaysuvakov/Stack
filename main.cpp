@@ -7,7 +7,8 @@ int main()
     Stack stk = {};
     StackCtor(&stk);
 
-    // ВЗЛОМ
+    stk.capacity = 10;
+    StackPush(&stk, 8);
 
     StackDtor(&stk);
     }
