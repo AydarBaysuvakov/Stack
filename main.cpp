@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include "errors.h"
 #include "stack.h"
 
 int main()
@@ -7,7 +8,6 @@ int main()
     Stack stk = {};
     StackCtor(&stk);
 
-    //Hack
 
     StackDtor(&stk);
     }
