@@ -10,7 +10,6 @@
 
 
 typedef int       Elem_t;
-typedef int       StackState;
 
 const size_t   DEFAULT_SIZE     = 0;
 const size_t   DEFAULT_CAPACITY = 8;
@@ -22,8 +21,8 @@ const int REALLOC_COEFFICIENT   = 2;
 const int MIN_REALLOC_DOWN_SIZE = 16;
 const int REALLOC_DOWN_BORDER   = 4;
 
-const size_t LOG_FILE_NAME_LENGHT     = 24;
-const size_t LOG_FILE_STK_NAME_LENGHT = 8;
+const size_t LOG_FILE_MAX_NAME_LENGHT     = 60;
+const size_t LOG_FILE_NAME_LENGHT = 20;
 
 typedef long long Canary_t;
 
@@ -42,16 +41,9 @@ const size_t   TWO_CANARY = 0;
 #endif
 
 #ifdef STACK_HASH_PROT
-typedef long long Hash_t;
+#include "hash.h"
+const size_t SIZE_OF_STACK_STRUCT = sizeof(Canary_t) * 2 + sizeof(Elem_t*) + sizeof(size_t) * 2 + sizeof(char*) * 3 + sizeof(unsigned) + sizeof(Hash_t) * 2;
 #endif
-
-enum error_t
-    {
-    OK               = 0,
-    ALLOCATION_ERROR = 1,
-    HASH_NOT_COMPARE = 2,
-    FILE_ERROR       = 3
-    };
 
 struct Stack
     {
@@ -98,21 +90,25 @@ enum StackErrorBit
 #endif
 };
 
-error_t MyStackCtor(Stack *stk, STACK_DEFN_ARGS);
+Error_t MyStackCtor(Stack *stk, STACK_DEFN_ARGS);
 
-error_t StackDtor(Stack *stk);
+Error_t StackDtor(Stack *stk);
 
-error_t FillStack(Stack *stk);
+Error_t FillStack(Stack *stk);
 
-error_t StackPush(Stack *stk, Elem_t value);
+Error_t StackPush(Stack *stk, Elem_t value);
 
-error_t StackPop(Stack *stk, Elem_t *ret_val);
+Elem_t  StackPop(Stack *stk);
 
-error_t StackRealloc(Stack* stk, size_t new_capacity);
+Elem_t StackTop(const Stack *stk);
 
-StackState StackValid(Stack *stk);
+Error_t StackRealloc(Stack* stk, size_t new_capacity);
 
-error_t MyStackDump(const Stack *stk, StackState state, STACK_DEFN_ARGS);
+State_t StackValid(Stack *stk);
+
+bool IsStackErrorState(State_t state);
+
+Error_t MyStackDump(const Stack *stk, State_t state, STACK_DEFN_ARGS);
 
 const char* GetStackErrorBitMsg(size_t bit);
 
@@ -126,6 +122,18 @@ Elem_t* GetDataLeftCanary(const Stack *stk);
 Elem_t* GetDataRightCanary(const Stack *stk);
 #endif
 
-error_t LogFileInit(Stack *stk, const char* name);
+#ifdef STACK_HASH_PROT
+Hash_t  StackHashFunction(const Stack *stk);
+
+Hash_t  DataHashFunction(const Stack *stk);
+
+Error_t SetHash(Stack *stk);
+
+Error_t HashCheck(Stack *stk);
+
+Error_t DataHashCheck(Stack *stk);
+
+Error_t StackHashCheck(Stack *stk);
+#endif
 
 #endif//STACK_H

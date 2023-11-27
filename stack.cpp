@@ -3,10 +3,12 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <string.h>
+#include "errors.h"
+#include "logfiles.h"
 #include "stack.h"
 #include "hash.h"
 
-error_t MyStackCtor(Stack *stk, const char* name, const unsigned line, const char* file, const char* func)
+Error_t MyStackCtor(Stack *stk, const char* name, const unsigned line, const char* file, const char* func)
     {
 #ifdef DEBUG
     assert(stk != NULL);
@@ -15,11 +17,11 @@ error_t MyStackCtor(Stack *stk, const char* name, const unsigned line, const cha
     stk->size     = DEFAULT_SIZE;
     stk->capacity = DEFAULT_CAPACITY;
 
-    char *data = (char*) malloc(DEFAULT_CAPACITY * sizeof(Elem_t) + TWO_CANARY * sizeof(Canary_t));
+    char *data = (char*) calloc(DEFAULT_CAPACITY * sizeof(Elem_t) + TWO_CANARY * sizeof(Canary_t), sizeof(char)); //calloc
     if (data == NULL)
         {
         perror("ERROR: cannot allocate memory");
-        return ALLOCATION_ERROR;
+        return AllocationError;
         }
 
     stk->data = (Elem_t*) (data + ONE_CANARY * sizeof(Canary_t));
@@ -30,10 +32,10 @@ error_t MyStackCtor(Stack *stk, const char* name, const unsigned line, const cha
     stk->file = file;
     stk->func = func;
 
-    if (LogFileInit(stk, name) == FILE_ERROR)
+    if (LogFileInit(&stk->logfile, "logfile", name, "html") == FileError)
         {
-        perror("ERROR: cannot open logfile");
-        return FILE_ERROR;
+        perror("ERROR: cannot open txt_logfile");
+        return FileError;
         }
 
 #ifdef STACK_CANARY_PROT
@@ -45,14 +47,14 @@ error_t MyStackCtor(Stack *stk, const char* name, const unsigned line, const cha
     SetHash(stk);
 #endif
 
-    return OK;
+    return Ok;
     }
 
-error_t StackDtor(Stack *stk)
+Error_t StackDtor(Stack *stk)
     {
 #ifdef DEBUG
-    StackState state = StackValid(stk);
-    if (state)
+    State_t state = StackValid(stk);
+    if (IsStackErrorState(state))
         {
         StackDump(stk, state);
         }
@@ -73,36 +75,12 @@ error_t StackDtor(Stack *stk)
     stk->stack_hash = NOT_VALID_VALUE;
 #endif
 
-    fprintf(stk->logfile, "\t</body>\n" "</html>\n");
-
     fclose(stk->logfile);
 
-    return OK;
+    return Ok;
     }
 
-error_t LogFileInit(Stack *stk, const char* name)
-    {
-    char file_name[LOG_FILE_NAME_LENGHT] = "logfile(";
-    strncat(file_name,  name   , LOG_FILE_STK_NAME_LENGHT);
-    strncat(file_name, ").html", LOG_FILE_STK_NAME_LENGHT);
-
-    stk->logfile = fopen(file_name, "w");
-    if (stk->logfile == NULL)
-        {
-        return FILE_ERROR;
-        }
-
-    fprintf(stk->logfile,   "<!DOCTYPE HTML>\n"
-                            "<html>\n"
-                            "\t<head>\n"
-                            "\t\t<meta charset=\"utf-8\">\n"
-                            "\t</head>\n"
-                            "\t<body>\n");
-
-    return OK;
-    }
-
-error_t FillStack(Stack *stk)
+Error_t FillStack(Stack *stk)
     {
 #ifdef DEBUG
     assert(stk != NULL);
@@ -123,14 +101,14 @@ error_t FillStack(Stack *stk)
         stk->data[iter] = POISON;
         }
 
-    return OK;
+    return Ok;
     }
 
-error_t StackPush(Stack *stk, Elem_t value)
+Error_t StackPush(Stack *stk, Elem_t value)
     {
 #ifdef DEBUG
-    StackState state = StackValid(stk);
-    if (state)
+    State_t state = StackValid(stk);
+    if (IsStackErrorState(state))
         {
         StackDump(stk, state);
         }
@@ -147,20 +125,27 @@ error_t StackPush(Stack *stk, Elem_t value)
     SetHash(stk);
 #endif
 
-    return OK;
+    return Ok;
     }
 
-error_t StackPop(Stack *stk, Elem_t *ret_val)
+Elem_t StackPop(Stack *stk)
     {
 #ifdef DEBUG
-    StackState state = StackValid(stk);
-    if (state)
+    State_t state = StackValid(stk);
+    if (IsStackErrorState(state))
         {
         StackDump(stk, state);
         }
 #endif
 
-    *ret_val = stk->data[--stk->size];
+    if (stk->size == 0)
+        {
+        printf("STACK is empty\n");
+        exit(1);
+        return POISON;
+        }
+
+    Elem_t ret_val = stk->data[--stk->size];
     stk->data[stk->size] = POISON;
 
     if (stk->size <= stk->capacity / REALLOC_DOWN_BORDER && stk->capacity > MIN_REALLOC_DOWN_SIZE)
@@ -172,14 +157,14 @@ error_t StackPop(Stack *stk, Elem_t *ret_val)
     SetHash(stk);
 #endif
 
-    return OK;
+    return ret_val;
     }
 
-error_t StackRealloc(Stack* stk, size_t new_capacity)
+Error_t StackRealloc(Stack* stk, size_t new_capacity)
     {
 #ifdef DEBUG
-    StackState state = StackValid(stk);
-    if (state)
+    State_t state = StackValid(stk);
+    if (IsStackErrorState(state))
         {
         StackDump(stk, state);
         }
@@ -189,19 +174,19 @@ error_t StackRealloc(Stack* stk, size_t new_capacity)
     if (data == NULL)
         {
         perror("ERROR: cannot allocate memory");
-        return ALLOCATION_ERROR;
+        return AllocationError;
         }
 
     stk->data     = (Elem_t*) (data + ONE_CANARY * sizeof(Canary_t));
     stk->capacity = new_capacity;
 
     FillStack(stk);
-    return OK;
+    return Ok;
     }
 
-StackState StackValid(Stack *stk)
+State_t StackValid(Stack *stk)
     {
-    StackState state = 0;
+    State_t state = 0;
 
     if (stk == NULL)                                           // 1
         {
@@ -251,7 +236,12 @@ StackState StackValid(Stack *stk)
     return state;
     }
 
-error_t MyStackDump(const Stack *stk, StackState state, const char* name, const unsigned line, const char* file, const char* func)
+bool IsStackErrorState(State_t state)
+    {
+    return state;
+    }
+
+Error_t MyStackDump(const Stack *stk, State_t state, const char* name, const unsigned line, const char* file, const char* func)
     {
     fprintf(stk->logfile, "<pre>\n\n");
 
@@ -287,13 +277,13 @@ error_t MyStackDump(const Stack *stk, StackState state, const char* name, const 
 
     fprintf(stk->logfile, "</pre>\n\n");
 
-    return OK;
+    return Ok;
     }
 
 const char* GetStackErrorBitMsg(size_t bit)
 {
-    const int  ERROR_COUNT = sizeof(StackState) * CHAR_BIT;
-    const char * const ERROR_MESSAGE[ERROR_COUNT] = {
+    static const int  ERROR_COUNT = sizeof(State_t) * CHAR_BIT;
+    static const char * const ERROR_MESSAGE[ERROR_COUNT] = {
         "Stack is nullptr",
         "Stack->data is nullptr",
         "Stack->size > Stack->capacity",
@@ -328,5 +318,73 @@ Elem_t* GetDataLeftCanary(const Stack *stk)
 Elem_t* GetDataRightCanary(const Stack *stk)
     {
     return stk->data + stk->capacity;
+    }
+#endif
+
+#ifdef STACK_HASH_PROT
+Hash_t StackHashFunction(const Stack *stk)
+    {
+    assert(stk != NULL);
+
+    return HashFunction((char*) stk, SIZE_OF_STACK_STRUCT);
+    }
+
+Hash_t DataHashFunction(const Stack *stk)
+    {
+    assert(stk != NULL);
+
+    return HashFunction((char*) stk->data - ONE_CANARY, stk->capacity + TWO_CANARY);
+    }
+
+Error_t SetHash(Stack *stk)
+    {
+    assert(stk != NULL);
+
+    stk->data_hash  =  DataHashFunction(stk);
+
+    stk->stack_hash = DEFAULT_HASH_VALUE;
+    stk->stack_hash = StackHashFunction(stk);
+
+    return Ok;
+    }
+
+Error_t StackHashCheck(Stack *stk)
+    {
+    assert(stk != NULL);
+
+    Hash_t curent_stk_hash = stk->stack_hash;
+    stk->stack_hash = DEFAULT_HASH_VALUE;
+    Hash_t stack_hash = StackHashFunction(stk);
+    if (stack_hash != curent_stk_hash)
+        {
+        return HashNotCompare;
+        }
+    stk->stack_hash = curent_stk_hash;
+
+    return Ok;
+    }
+
+Error_t DataHashCheck(Stack *stk)
+    {
+    assert(stk != NULL);
+
+    Hash_t data_hash = DataHashFunction(stk);
+    if (data_hash != stk->data_hash)
+        {
+        return HashNotCompare;
+        }
+
+    return Ok;
+    }
+
+
+Error_t HashCheck(Stack *stk)
+    {
+    assert(stk != NULL);
+
+    if ( DataHashCheck(stk)) return HashNotCompare;
+    if (StackHashCheck(stk)) return HashNotCompare;
+
+    return Ok;
     }
 #endif
