@@ -2,17 +2,17 @@ CFLAGS=-D _DEBUG -ggdb3 -std=c++17 -O0 -Wall -Wextra -Weffc++ -Waggressive-loop-
 
 all: stack clean_o
 
-stack: main.o stack.o
-	g++ main.o stack.o -o stack $(CFLAGS)
+stack: main.o stack.o logfiles.o
+	g++ main.o stack.o logfiles.o -o stack $(CFLAGS)
 
-debug: main.o
-	g++ -DDEBUG -DSTACK_CANARY_PROT -DSTACK_HASH_PROT main.o stack.cpp hash.cpp -o debug
+debug: main.o stack.o hash.o logfiles.o
+	g++ -DDEBUG -DSTACK_CANARY_PROT -DSTACK_HASH_PROT main.o stack.o hash.o logfiles.o -o debug
 
-canaries: main.o
-	g++ -DSTACK_CANARY_PROT main.o stack.cpp -o debug
+canaries: main.o stack.o logfiles.o
+	g++ -DSTACK_CANARY_PROT main.o stack.o logfiles.o -o debug
 
-hash: main.o
-	g++ -DSTACK_HASH_PROT main.o stack.cpp hash.cpp -o debug
+hash: main.o stack.o hash.o logfiles.o
+	g++ -DSTACK_HASH_PROT main.o stack.o hash.o logfiles.o -o debug
 
 main.o: main.cpp
 	g++ -c main.cpp
@@ -22,6 +22,10 @@ stack.o: stack.cpp
 
 hash.o: hash.cpp
 	g++ -c hash.cpp
+
+logfiles.o: logfiles.cpp
+	g++ -c logfiles.cpp
+
 
 clean:
 	rm -rf *.o stack debug
